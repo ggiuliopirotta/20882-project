@@ -1,4 +1,5 @@
 import torch
+from torch.cuda.amp import autocast, GradScaler
 
 
 def train_unsupervised(
@@ -11,7 +12,7 @@ def train_unsupervised(
         eps = eps0 * (1 - epoch / epochs)
 
         for bx, _ in train_loader:
-            v = bx.to(device)
+            v = bx.to(device, non_blocking=True)
 
             with torch.no_grad():
                 # 1. Rank the hidden units based on input currents
@@ -63,6 +64,7 @@ def train_supervised(
     model.to(device)
     train_acc = []
     test_acc = []
+    scaler = GradScaler()
 
     for epoch in range(epochs):
         adjust_lr(optimizer, epoch)
@@ -76,14 +78,19 @@ def train_supervised(
             y_true = torch.eye(10)[by].to(device) * 2 - 1
 
             optimizer.zero_grad()
-            y = model(v)
-            loss = torch.sum(torch.abs(y - y_true) ** m) / v.size(0)
-            preds = model(v).argmax(dim=1)
-            correct += (preds == by.to(device)).sum().item()
-            total += by.size(0)
 
-            loss.backward()
-            optimizer.step()
+            with autocast(dtype=torch.bfloat16):
+                y = model(v)
+                loss = torch.sum(torch.abs(y - y_true) ** m) / v.size(0)
+
+            with torch.no_grad():
+                preds = model(v).argmax(dim=1)
+                correct += (preds == by.to(device)).sum().item()
+                total += by.size(0)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
         if epoch % 10 == 0:
             acc = 100 * correct / total
@@ -104,6 +111,7 @@ def train_ff_network(
     model.to(device)
     train_acc = []
     test_acc = []
+    scaler = GradScaler()
 
     for epoch in range(epochs):
         model.train()
@@ -115,14 +123,19 @@ def train_ff_network(
             bx, by = bx.to(device), by.to(device)
 
             optimizer.zero_grad()
-            y = model(bx)
-            loss = criterion(y, by)
-            preds = y.argmax(dim=1)
-            correct += (preds == by).sum().item()
-            total += by.size(0)
 
-            loss.backward()
-            optimizer.step()
+            with autocast(dtype=torch.bfloat16):
+                y = model(bx)
+                loss = criterion(y, by)
+
+            with torch.no_grad():
+                preds = y.argmax(dim=1)
+                correct += (preds == by).sum().item()
+                total += by.size(0)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
         if epoch % 10 == 0:
             acc = 100 * correct / total

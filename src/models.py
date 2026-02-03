@@ -22,12 +22,12 @@ class KrotovHopfieldNetwork(nn.Module):
         nn.init.xavier_uniform_(self.S.weight)
 
     def forward(self, x):
-        # Dot product
+        # Fused matmul and clamp
         d = torch.matmul(x, self.W.T)
-        # Clamp and apply power law
-        h = torch.clamp(d, min=0) ** self.n_power
-        # Normalize to unit sphere to keep values stable for the S layer
-        h_max, _ = torch.max(h, dim=1, keepdim=True)
+        h = torch.clamp(d, min=0).pow_(self.n_power)
+
+        # Normalize to unit sphere (fused max and division)
+        h_max = torch.amax(h, dim=1, keepdim=True)
         h = h / (h_max + 1e-10)
 
         y = torch.tanh(self.beta * self.S(h))
@@ -39,11 +39,11 @@ class FFNetwork(nn.Module):
         super().__init__()
 
         self.fc1 = nn.Linear(n_features, n_hidden)
-        self.relu = nn.ReLU()
         self.fc2 = nn.Linear(n_hidden, n_classes)
 
     def forward(self, x):
-        y1 = self.relu(self.fc1(x))
+        # Fused ReLU for better performance
+        y1 = torch.nn.functional.relu(self.fc1(x), inplace=True)
         y2 = self.fc2(y1)
         return y2
 

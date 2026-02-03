@@ -5,10 +5,20 @@ from models import KrotovHopfieldNetwork, FFNetwork
 import torch
 from torch.utils.data import Subset
 
+# RTX 5060 Ti Optimizations
+# - Auto-tune kernels
+# - Use TF32 for matmul (faster on Ampere+)
+# - Use TF32 for convolutions
+# - Use TF32 Tensor Cores
+torch.backends.cudnn.benchmark = True
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+torch.set_float32_matmul_precision("high")
+
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    print(f"Device: {device}")
     dataset_name = "MNIST"
 
     config = json.load(open("./src/config/mnist.json", "r"))
@@ -18,10 +28,32 @@ if __name__ == "__main__":
 
     batch_size = config["batch_size"]
     train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=batch_size, shuffle=True
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        persistent_workers=True,
     )
-    dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=batch_size)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
+    dev_loader = torch.utils.data.DataLoader(
+        dev_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        persistent_workers=True,
+    )
+    test_loader = torch.utils.data.DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        persistent_workers=True,
+    )
 
     kh_model = KrotovHopfieldNetwork(
         n_features=config["n_features"],
@@ -37,14 +69,20 @@ if __name__ == "__main__":
         n_classes=config["n_classes"],
     )
 
+    kh_model = kh_model.to(device)
+    ff_model = ff_model.to(device)
+
     for model in [kh_model, ff_model]:
-        model.to(device)
+        model_name = "kh" if model.__class__ == KrotovHopfieldNetwork else "ff"
+        print(f"\nStarting training for {model_name} model...")
+        print("Compiling model with torch.compile for RTX 5060 Ti...")
 
-        model_name = "kh" if isinstance(model, KrotovHopfieldNetwork) else "ff"
-        print(f"Starting training for {model_name} model...")
+        if model_name == "ff":
+            # Compile FF model for RTX 5060 Ti
+            model = torch.compile(model, mode="max-autotune", fullgraph=False)
 
-        if isinstance(model, KrotovHopfieldNetwork):
-
+        if model_name == "kh":
+            print("Training unsupervised...")
             train_unsupervised(
                 model=model,
                 train_loader=train_loader,
@@ -58,6 +96,7 @@ if __name__ == "__main__":
             )
 
             optimizer = torch.optim.Adam(model.S.parameters(), lr=0.001)
+            print("Training supervised...")
             train_acc, test_acc = train_supervised(
                 model=model,
                 train_loader=train_loader,
@@ -70,6 +109,7 @@ if __name__ == "__main__":
 
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            print("Training supervised...")
             train_acc, test_acc = train_supervised(
                 model=model,
                 train_loader=train_loader,
