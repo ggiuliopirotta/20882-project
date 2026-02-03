@@ -26,5 +26,6 @@ def visualize_learned_features(
 
 
 if __name__ == "__main__":
-    W = torch.randn(100, 28 * 28)
+    path = "./results/ff_cifar.pth"
+    W = torch.load(path, map_location="cpu")
     visualize_learned_features(W, filename="test.png")

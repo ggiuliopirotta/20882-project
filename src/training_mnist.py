@@ -1,8 +1,9 @@
 from dataset import load_dataset
-from functions import train_unsupervised, train_supervised
+from functions import train_unsupervised, train_supervised, train_ff_network
 import json
 from models import KrotovHopfieldNetwork, FFNetwork
 import torch
+import torch.nn as nn
 from torch.utils.data import Subset
 
 torch.set_float32_matmul_precision("high")
@@ -26,7 +27,7 @@ if __name__ == "__main__":
     config = json.load(open("./src/config/mnist.json", "r"))
 
     train_set, dev_set, test_set = load_dataset(dataset_name)
-    train_set = Subset(train_set, range(10))
+    # train_set = Subset(train_set, range(10))
 
     batch_size = config["batch_size"]
     train_loader = torch.utils.data.DataLoader(
@@ -84,43 +85,44 @@ if __name__ == "__main__":
             model = torch.compile(model, mode="max-autotune", fullgraph=False)
 
         if model_name == "kh":
-            print("Training unsupervised...")
-            train_unsupervised(
-                model=model,
-                train_loader=train_loader,
-                device=device,
-                p=config["p"],
-                k=config["k"],
-                delta=config["delta"],
-                eps0=config["eps0"],
-                precision=config["precision"],
-                epochs=config["epochs_unsupervised"],
-            )
+            continue
+            # print("Training unsupervised...")
+            # train_unsupervised(
+            #     model=model,
+            #     train_loader=train_loader,
+            #     device=device,
+            #     p=config["p"],
+            #     k=config["k"],
+            #     delta=config["delta"],
+            #     eps0=config["eps0"],
+            #     precision=config["precision"],
+            #     epochs=config["epochs_unsupervised"],
+            # )
 
-            torch.save(model.state_dict(), f"./results/{model_name}_unsup_mnist.pth")
-            print(f"Model saved!")
+            # torch.save(model.state_dict(), f"./results/{model_name}_unsup_mnist.pth")
+            # print(f"Model saved!")
 
-            optimizer = torch.optim.Adam(model.S.parameters(), lr=0.001)
-            print("Training supervised...")
-            train_acc, test_acc = train_supervised(
-                model=model,
-                train_loader=train_loader,
-                device=device,
-                optimizer=optimizer,
-                m=config["m"],
-                epochs=config["epochs_supervised"],
-                test_loader=dev_loader,
-            )
-
+            # optimizer = torch.optim.Adam(model.S.parameters(), lr=0.001)
+            # print("Training supervised...")
+            # train_acc, test_acc = train_supervised(
+            #     model=model,
+            #     train_loader=train_loader,
+            #     device=device,
+            #     optimizer=optimizer,
+            #     m=config["m"],
+            #     epochs=config["epochs_supervised"],
+            #     test_loader=dev_loader,
+            # )
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-            print("Training supervised...")
-            train_acc, test_acc = train_supervised(
+            criterion = nn.CrossEntropyLoss()
+            print("Training...")
+            train_acc, test_acc = train_ff_network(
                 model=model,
                 train_loader=train_loader,
-                device=device,
                 optimizer=optimizer,
-                m=config["m"],
+                criterion=criterion,
+                device=device,
                 epochs=config["epochs_supervised"],
                 test_loader=dev_loader,
             )

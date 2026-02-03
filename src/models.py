@@ -38,8 +38,11 @@ class FFNetwork(nn.Module):
     def __init__(self, n_features, n_hidden, n_classes):
         super().__init__()
 
-        self.fc1 = nn.Linear(n_features, n_hidden)
-        self.fc2 = nn.Linear(n_hidden, n_classes)
+        self.fc1 = nn.Linear(n_features, n_hidden, bias=False)
+        nn.init.kaiming_uniform_(self.fc1.weight, nonlinearity="relu")
+        self.fc2 = nn.Linear(n_hidden, n_classes, bias=False)
+        nn.init.xavier_uniform_(self.fc2.weight)
+
 
     def forward(self, x):
         # Fused ReLU for better performance

@@ -46,11 +46,11 @@ def plot_training_curves(
 
 if __name__ == "__main__":
 
-    data = json.load(open("./results/mnist.json", "r"))
+    data = json.load(open("./results/cifar.json", "r"))
     plot_training_curves(
         data_dict=data,
-        save_path="./results/mnist_training.png",
-        title="MNIST Training Curves",
+        save_path="./results/cifar_training.png",
+        title="CIFAR Training Curves",
         xlabel="Epoch",
         ylabel="Error (%)",
     )

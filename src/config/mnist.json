@@ -2,13 +2,13 @@
   "batch_size": 512,
 
   "n_features": 784,
-  "n_hidden": 1024,
+  "n_hidden": 2000,
   "n_classes": 10,
   "n_power": 4.5,
   "beta": 1.0,
 
   "epochs_unsupervised": 1000,
-  "epochs_supervised": 300,
+  "epochs_supervised": 50,
   "p": 3.0,
   "k": 7,
   "m": 6,

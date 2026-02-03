@@ -4,6 +4,7 @@ import itertools
 import json
 from models import KrotovHopfieldNetwork
 import torch
+import torch.nn as nn
 from torch.utils.data import Subset
 
 
@@ -60,7 +61,8 @@ if __name__ == "__main__":
         )
 
         # 3. Train Supervised
-        optimizer = torch.optim.Adam(model.S.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(model.S.parameters(), lr=0.01)
+
         train_supervised(
             model=model,
             train_loader=train_loader,
