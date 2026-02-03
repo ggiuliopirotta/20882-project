@@ -3,6 +3,7 @@ from functions import train_unsupervised, train_supervised
 import json
 from models import KrotovHopfieldNetwork, FFNetwork
 import torch
+torch.set_float32_matmul_precision('high')
 from torch.utils.data import Subset
 
 # RTX 5060 Ti Optimizations
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     config = json.load(open("./src/config/mnist.json", "r"))
 
     train_set, dev_set, test_set = load_dataset(dataset_name)
-    train_set = Subset(train_set, range(10))
+    # train_set = Subset(train_set, range(10))
 
     batch_size = config["batch_size"]
     train_loader = torch.utils.data.DataLoader(
@@ -75,7 +76,6 @@ if __name__ == "__main__":
     for model in [kh_model, ff_model]:
         model_name = "kh" if model.__class__ == KrotovHopfieldNetwork else "ff"
         print(f"\nStarting training for {model_name} model...")
-        print("Compiling model with torch.compile for RTX 5060 Ti...")
 
         if model_name == "ff":
             # Compile FF model for RTX 5060 Ti
