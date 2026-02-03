@@ -4,7 +4,7 @@ import numpy as np
 
 
 def plot_training_curves(
-    data_dict, save_path, title="Training Curves", xlabel="Epochs", ylabel="Accuracy"
+    data_dict, save_path, title="Training Curves", xlabel="Epochs", ylabel="Error (%)"
 ):
     plt.figure(figsize=(10, 6))
 
@@ -16,11 +16,11 @@ def plot_training_curves(
             linestyle = "-"
             marker = "s"
 
-        epochs = np.arange(len(data))
+        epochs = (np.arange(len(data)) + 1) * 10
 
         plt.plot(
             epochs,
-            data,
+            100 - np.array(data),
             label=legend_name,
             linestyle=linestyle,
             marker=marker,
@@ -32,6 +32,7 @@ def plot_training_curves(
     plt.xlabel(xlabel, fontsize=12)
     plt.ylabel(ylabel, fontsize=12)
     plt.title(title, fontsize=14, fontweight="bold")
+    plt.ylim(0, 10)
     plt.legend(loc="best", fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -51,5 +52,5 @@ if __name__ == "__main__":
         save_path="./results/mnist_training.png",
         title="MNIST Training Curves",
         xlabel="Epoch",
-        ylabel="Accuracy",
+        ylabel="Error (%)",
     )
