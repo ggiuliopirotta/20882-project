@@ -3,6 +3,11 @@ from torch.utils.data import ConcatDataset, random_split
 from torchvision import datasets, transforms
 
 
+class FlattenTransform:
+    def __call__(self, x):
+        return torch.flatten(x)
+
+
 def load_dataset(dataset_name, root="./data", download=True):
 
     dataset_class = getattr(datasets, dataset_name)
@@ -10,7 +15,7 @@ def load_dataset(dataset_name, root="./data", download=True):
         [
             transforms.ToTensor(),
             transforms.Normalize((0), (1)),
-            transforms.Lambda(lambda x: torch.flatten(x)),
+            FlattenTransform(),
         ]
     )
 

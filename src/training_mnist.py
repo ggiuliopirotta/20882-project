@@ -32,7 +32,7 @@ if __name__ == "__main__":
         train_set,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         prefetch_factor=2,
         persistent_workers=True,
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         dev_set,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         prefetch_factor=2,
         persistent_workers=True,
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         test_set,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         prefetch_factor=2,
         persistent_workers=True,
@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
     for model in [kh_model, ff_model]:
         model_name = "kh" if model.__class__ == KrotovHopfieldNetwork else "ff"
-        print(f"\nStarting training for {model_name} model...")
+        print(f"Starting training for {model_name} model...")
 
         if model_name == "ff":
             # Compile FF model for RTX 5060 Ti
