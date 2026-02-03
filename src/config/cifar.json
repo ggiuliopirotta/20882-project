@@ -1,0 +1,18 @@
+{
+  "batch_size": 1024,
+
+  "n_features": 3072,
+  "n_hidden": 1024,
+  "n_classes": 10,
+  "n_power": 10,
+  "beta": 1.0,
+
+  "epochs_unsupervised": 1000,
+  "epochs_supervised": 300,
+  "p": 3.0,
+  "k": 2,
+  "m": 6,
+  "delta": 0.2,
+  "eps0": 0.02,
+  "precision": 1e-30
+}
