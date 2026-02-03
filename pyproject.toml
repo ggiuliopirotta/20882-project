@@ -3,9 +3,19 @@ name = "20882-project"
 version = "0.1.0"
 description = "Unsupervised learning by competing hidden units paper"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13, <3.14"
 dependencies = [
     "matplotlib>=3.10.8",
-    "torch>=2.10.0",
-    "torchvision>=0.25.0",
+    "torch",
+    "torchvision",
+    "triton-windows",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-gpu"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-gpu" }
+torchvision = { index = "pytorch-gpu" }
