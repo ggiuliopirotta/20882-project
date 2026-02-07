@@ -1,14 +1,14 @@
 {
-  "batch_size": 512,
+  "batch_size": 1024,
 
   "n_features": 784,
-  "n_hidden": 1024,
+  "n_hidden": 128,
   "n_classes": 10,
   "n_power": 4.5,
   "beta": 1.0,
 
-  "epochs_unsupervised": 1000,
-  "epochs_supervised": 300,
+  "epochs_unsupervised": 500,
+  "epochs_supervised": 100,
   "p": 3.0,
   "k": 7,
   "m": 6,

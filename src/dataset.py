@@ -1,5 +1,6 @@
+import os
 import torch
-from torch.utils.data import ConcatDataset, random_split
+from torch.utils.data import ConcatDataset, random_split, Subset
 from torchvision import datasets, transforms
 
 
@@ -8,7 +9,9 @@ class FlattenTransform:
         return torch.flatten(x)
 
 
-def load_dataset(dataset_name, root="./data", download=True):
+def load_dataset(dataset_name, root=None, download=True):
+    if root is None:
+        root = os.path.join(".", "data")
 
     dataset_class = getattr(datasets, dataset_name)
     transform = transforms.Compose(
@@ -39,6 +42,7 @@ def load_dataset(dataset_name, root="./data", download=True):
     train_set, dev_set, test_set = random_split(
         full_df, [train_size, dev_size, test_size], generator=generator
     )
+    train_set = Subset(train_set, range(1))
 
     print("Dataset loaded and split")
     print(f"- Train size: {len(train_set)}")

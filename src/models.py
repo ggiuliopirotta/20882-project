@@ -53,9 +53,7 @@ if __name__ == "__main__":
     n_features = 28 * 28
     n_hidden = 1024
     n_classes = 10
-    kh_network = KrotovHopfieldNetwork(
-        n_features=n_features, n_hidden=n_hidden, n_classes=n_classes
-    )
+    kh_network = KrotovHopfieldNetwork(n_features, n_hidden, n_classes)
 
     try:
         x = torch.randn(100, n_features)

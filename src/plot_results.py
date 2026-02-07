@@ -1,6 +1,8 @@
+import argparse
 import json
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 
 def plot_training_curves(
@@ -32,7 +34,6 @@ def plot_training_curves(
     plt.xlabel(xlabel, fontsize=12)
     plt.ylabel(ylabel, fontsize=12)
     plt.title(title, fontsize=14, fontweight="bold")
-    plt.ylim(0, 10)
     plt.legend(loc="best", fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -46,11 +47,17 @@ def plot_training_curves(
 
 if __name__ == "__main__":
 
-    data = json.load(open("./results/mnist.json", "r"))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset_name", type=str, required=True)
+    args = parser.parse_args()
+
+    name = args.dataset_name.lower()
+
+    data = json.load(open(os.path.join(".", "results", f"{name}.json"), "r"))
     plot_training_curves(
         data_dict=data,
-        save_path="./results/mnist_training.png",
-        title="MNIST Training Curves",
-        xlabel="Epoch",
+        save_path=os.path.join(".", "results", f"{name}_training.png"),
+        title=f"{name.upper()} Training Curves",
+        xlabel="Epochs",
         ylabel="Error (%)",
     )

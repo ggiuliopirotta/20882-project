@@ -1,74 +1,88 @@
+import os
 import torch
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from torch.profiler import profile, ProfilerActivity
 
 
 def train_unsupervised(
-    model, train_loader, device, p, k, delta, eps0, precision, epochs
+    device,
+    model,
+    train_loader,
+    p,
+    k,
+    delta,
+    eps0,
+    precision,
+    epochs,
+    use_profiler=False,
+    profile_batches=0,
 ):
     model.to(device)
+    profiler = None
 
-    prof = profile(
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True
-    ) if torch.cuda.is_available() else None
-    
-    batch_count = 0
-    profile_batches = 10
+    if use_profiler:
+        if torch.cuda.is_available():
+            profiler = profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+            )
+        else:
+            print("cuda not available, profiler disabled")
 
     for epoch in range(epochs):
-        # Use a linear learning rate annealing
+
         eps = eps0 * (1 - epoch / epochs)
-
         # Profile on first epoch
-        if epoch == 0 and prof is not None:
-            prof.__enter__()
+        if epoch == 0 and profiler is not None:
+            profiler.__enter__()
 
-        for bx, _ in train_loader:
+        for batch_idx, (bx, _) in enumerate(train_loader):
             v = bx.to(device, non_blocking=True)
+            batch_size_range = torch.arange(v.size(0), device=device)
 
-            with torch.no_grad():
-                # 1. Rank the hidden units based on input currents
+            with torch.no_grad(), autocast(device.type):
+                # 1. Rank hidden units based on input currents
                 currents = torch.matmul(
                     v, (torch.sign(model.W) * torch.abs(model.W) ** (p - 1)).T
                 )
                 ranked = torch.argsort(currents, dim=1)
 
-                # 2. Create the ranking activation 'g'
+                # 2. Create ranking activation 'g'
                 yl = torch.zeros((model.W.shape[0], v.size(0)), device=device)
-                yl[ranked[:, -1], torch.arange(v.size(0))] = 1.0
-                yl[ranked[:, -k], torch.arange(v.size(0))] = -delta
+                yl[ranked[:, -1], batch_size_range] = 1.0
+                yl[ranked[:, -k], batch_size_range] = -delta
 
-                # 3. Calculate the update 'ds' for the whole batch at once
+                # 3. Calculate update 'ds' for the whole batch
                 xx = torch.sum(yl * currents.t(), dim=1, keepdim=True)
                 ds = torch.matmul(yl, v) - xx * model.W
 
-                # 4. Max-normalize the update for stability
+                # 4. Max-normalize update
                 nc = torch.max(torch.abs(ds))
-                if nc <= precision:
-                    nc = precision
+                nc = torch.clamp(nc, min=precision)
 
-                # 5. Apply the update
-                model.W += eps * (ds / nc)
+                # 5. Apply update
+                model.W.add_(eps * (ds / nc))
 
             # Profile only first N batches of first epoch
-            if epoch == 0 and prof is not None:
-                batch_count += 1
-                if batch_count >= profile_batches:
+            if epoch == 0 and profiler is not None:
+                if batch_idx >= profile_batches:
                     break
 
         # Stop profiler after first epoch
-        if epoch == 0 and prof is not None:
-            prof.__exit__(None, None, None)
-            print("\n" + "="*80)
-            print("PROFILING RESULTS (Unsupervised Training)")
-            print("="*80)
-            print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-            prof.export_chrome_trace("trace_unsupervised.json")
-            print("\nTrace exported to trace_unsupervised.json (open in chrome://tracing)")
-            print("="*80 + "\n")
+        if epoch == 0 and profiler is not None:
+            profiler.__exit__(None, None, None)
+            print("\n" + "=" * 17)
+            print("PROFILING RESULTS")
+            print("=" * 17)
+            print(
+                profiler.key_averages().table(sort_by="cuda_time_total", row_limit=10)
+            )
+            profiler.export_chrome_trace(
+                os.path.join(".", "results", "trace_unsupervised.json")
+            )
+            print("\nTrace exported to file")
 
         if epoch % 100 == 0:
             width = len(str(epochs - 1))
@@ -91,42 +105,49 @@ def adjust_lr(optimizer, epoch):
 
 
 def train_supervised(
-    model, train_loader, device, optimizer, m, epochs, test_loader=None
+    device,
+    model,
+    train_loader,
+    optimizer,
+    m,
+    epochs,
+    dev_loader=None,
+    use_profiler=False,
+    profile_batches=0,
 ):
     model.to(device)
     train_acc = []
     test_acc = []
     scaler = GradScaler(device)
+    profiler = None
 
-    # Setup profiler for first epoch
-    prof = profile(
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True
-    ) if torch.cuda.is_available() else None
-    
-    batch_count = 0
-    profile_batches = 10
+    if use_profiler:
+        if torch.cuda.is_available():
+            profiler = profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+            )
+        else:
+            print("cuda not available, profiler disabled")
 
     for epoch in range(epochs):
         adjust_lr(optimizer, epoch)
         model.train()
-
         correct = 0
         total = 0
 
         # Profile on first epoch
-        if epoch == 0 and prof is not None:
-            prof.__enter__()
+        if epoch == 0 and profiler is not None:
+            profiler.__enter__()
 
-        for bx, by in train_loader:
-            v = bx.to(device)
+        for batch_idx, (bx, by) in enumerate(train_loader):
+            v = bx.to(device, non_blocking=True)
             y_true = torch.eye(10)[by].to(device) * 2 - 1
 
             optimizer.zero_grad()
-
-            with autocast(device, dtype=torch.bfloat16):
+            with autocast(device.type):
                 y = model(v)
                 loss = torch.sum(torch.abs(y - y_true) ** m) / v.size(0)
 
@@ -140,29 +161,31 @@ def train_supervised(
             scaler.update()
 
             # Profile only first N batches of first epoch
-            if epoch == 0 and prof is not None:
-                batch_count += 1
-                if batch_count >= profile_batches:
+            if epoch == 0 and profiler is not None:
+                if batch_idx >= profile_batches:
                     break
 
         # Stop profiler after first epoch
-        if epoch == 0 and prof is not None:
-            prof.__exit__(None, None, None)
-            print("\n" + "="*80)
-            print("PROFILING RESULTS (Supervised Training)")
-            print("="*80)
-            print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-            prof.export_chrome_trace("trace_supervised.json")
-            print("\nTrace exported to trace_supervised.json (open in chrome://tracing)")
-            print("="*80 + "\n")
+        if epoch == 0 and profiler is not None:
+            profiler.__exit__(None, None, None)
+            print("\n" + "=" * 17)
+            print("PROFILING RESULTS")
+            print("=" * 17)
+            print(
+                profiler.key_averages().table(sort_by="cuda_time_total", row_limit=10)
+            )
+            profiler.export_chrome_trace(
+                os.path.join(".", "results", "trace_supervised.json")
+            )
+            print("\nTrace exported to file")
 
         if epoch % 10 == 0:
             acc = 100 * correct / total
             width = len(str(epochs - 1))
             print(f"Run epoch {epoch:0{width}d} -> Accuracy: {acc:.2f}%")
             train_acc.append(acc)
-            if test_loader is not None:
-                acc = test_model(model, test_loader, device)
+            if dev_loader is not None:
+                acc = test_model(device, model, dev_loader)
                 print(f"Test Accuracy: {acc:.2f}%")
                 test_acc.append(acc)
 
@@ -170,7 +193,7 @@ def train_supervised(
 
 
 def train_ff_network(
-    model, train_loader, optimizer, criterion, device, epochs, test_loader
+    device, model, train_loader, criterion, optimizer, epochs, dev_loader=None
 ):
     model.to(device)
     train_acc = []
@@ -179,7 +202,6 @@ def train_ff_network(
 
     for epoch in range(epochs):
         model.train()
-
         correct = 0
         total = 0
 
@@ -187,8 +209,7 @@ def train_ff_network(
             bx, by = bx.to(device), by.to(device)
 
             optimizer.zero_grad()
-
-            with autocast(dtype=torch.bfloat16):
+            with autocast(device.type):
                 y = model(bx)
                 loss = criterion(y, by)
 
@@ -206,15 +227,15 @@ def train_ff_network(
             width = len(str(epochs - 1))
             print(f"Run epoch {epoch:0{width}d} -> Accuracy: {acc:.2f}%")
             train_acc.append(acc)
-            if test_loader is not None:
-                acc = test_model(model, test_loader, device)
+            if dev_loader is not None:
+                acc = test_model(device, model, dev_loader)
                 print(f"Test Accuracy: {acc:.2f}%")
                 test_acc.append(acc)
 
     return train_acc, test_acc
 
 
-def test_model(model, test_loader, device):
+def test_model(device, model, eval_loader):
     model.to(device)
     model.eval()
 
@@ -222,7 +243,7 @@ def test_model(model, test_loader, device):
     total = 0
 
     with torch.no_grad():
-        for tx, ty in test_loader:
+        for tx, ty in eval_loader:
             v = tx.to(device)
             y_true = ty.to(device)
 

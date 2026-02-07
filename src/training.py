@@ -1,34 +1,24 @@
 from dataset import load_dataset
-from functions import train_unsupervised, train_supervised
+from utils import train_ff_network, train_supervised, train_unsupervised
 import json
-from models import KrotovHopfieldNetwork, FFNetwork
+from models import FFNetwork, KrotovHopfieldNetwork
+import os
 import torch
-from torch.utils.data import Subset
-
-torch.set_float32_matmul_precision("high")
-
-# RTX 5060 Ti Optimizations
-# - Auto-tune kernels
-# - Use TF32 for matmul (faster on Ampere+)
-# - Use TF32 for convolutions
-# - Use TF32 Tensor Cores
-torch.backends.cudnn.benchmark = True
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-torch.set_float32_matmul_precision("high")
 
 
 if __name__ == "__main__":
+
+    # SET DATASET NAME (MNIST or CIFAR10)
+    data_name = "cifar10"
+    print(f"Dataset selected: {data_name.upper()}")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
-    dataset_name = "MNIST"
 
-    config = json.load(open("./src/config/mnist.json", "r"))
-
-    train_set, dev_set, test_set = load_dataset(dataset_name)
-    train_set = Subset(train_set, range(10))
-
+    config = json.load(open(os.path.join(".", "config", f"{data_name}.json"), "r"))
+    train_set, dev_set, test_set = load_dataset(data_name.upper())
     batch_size = config["batch_size"]
+
     train_loader = torch.utils.data.DataLoader(
         train_set,
         batch_size=batch_size,
@@ -76,19 +66,16 @@ if __name__ == "__main__":
 
     for model in [kh_model, ff_model]:
         model_name = "kh" if model.__class__ == KrotovHopfieldNetwork else "ff"
-        save_path = f"./results/{model_name}_mnist.pth"
-        print(f"Starting training for {model_name} model...")
-
-        if model_name == "ff":
-            # Compile FF model for RTX 5060 Ti
-            model = torch.compile(model, mode="max-autotune", fullgraph=False)
+        save_path = os.path.join(".", "results", f"{data_name}_{model_name}")
+        rel_path = None
+        print(f"Using {model_name} model")
 
         if model_name == "kh":
-            print("Training unsupervised...")
+            print("Starting UNSUPERVISED...")
             train_unsupervised(
+                device=device,
                 model=model,
                 train_loader=train_loader,
-                device=device,
                 p=config["p"],
                 k=config["k"],
                 delta=config["delta"],
@@ -97,38 +84,43 @@ if __name__ == "__main__":
                 epochs=config["epochs_unsupervised"],
             )
 
-            torch.save(model.state_dict(), f"./results/{model_name}_unsup_mnist.pth")
-            print(f"Model saved!")
+            path = save_path + "_unsupervised.pth"
+            torch.save(model.state_dict(), path)
+            print(f"Model saved to {path}")
 
             optimizer = torch.optim.Adam(model.S.parameters(), lr=0.001)
-            print("Training supervised...")
+            print("Starting SUPERVISED...")
             train_acc, test_acc = train_supervised(
+                device=device,
                 model=model,
                 train_loader=train_loader,
-                device=device,
                 optimizer=optimizer,
                 m=config["m"],
                 epochs=config["epochs_supervised"],
-                test_loader=dev_loader,
+                dev_loader=dev_loader,
             )
+            rel_path = "_supervised.pth"
 
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-            print("Training supervised...")
-            train_acc, test_acc = train_supervised(
+            criterion = torch.nn.CrossEntropyLoss()
+            print("Starting SUPERVISED...")
+            train_acc, test_acc = train_ff_network(
+                device=device,
                 model=model,
                 train_loader=train_loader,
-                device=device,
+                criterion=criterion,
                 optimizer=optimizer,
-                m=config["m"],
                 epochs=config["epochs_supervised"],
-                test_loader=dev_loader,
+                dev_loader=dev_loader,
             )
+            rel_path = "_baseline.pth"
 
-        torch.save(model.state_dict(), save_path)
-        print(f"Model saved!")
+        path = save_path + rel_path
+        torch.save(model.state_dict(), path)
+        print(f"Model saved to {path}")
 
-        results_path = "./results/mnist.json"
+        results_path = os.path.join(".", "results", f"{data_name}.json")
         try:
             with open(results_path, "r") as f:
                 results = json.load(f)
@@ -141,4 +133,4 @@ if __name__ == "__main__":
         with open(results_path, "w") as f:
             json.dump(results, f, indent=2)
 
-        print("Results saved!")
+        print(f"Results saved to {results_path}")
